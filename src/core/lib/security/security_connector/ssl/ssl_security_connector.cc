@@ -40,21 +40,28 @@
 #include "src/core/tsi/ssl_transport_security.h"
 #include "src/core/tsi/transport_security.h"
 
+#ifndef TSI_OPENSSL_ALPN_SUPPORT
+#define TSI_OPENSSL_ALPN_SUPPORT 1
+#endif
+
 namespace {
 grpc_error* ssl_check_peer(
     const char* peer_name, const tsi_peer* peer,
-    grpc_core::RefCountedPtr<grpc_auth_context>* auth_context) {
+    grpc_core::RefCountedPtr<grpc_auth_context>* auth_context,
+    bool check_alpn) {
 #if TSI_OPENSSL_ALPN_SUPPORT
-  /* Check the ALPN if ALPN is supported. */
-  const tsi_peer_property* p =
-      tsi_peer_get_property_by_name(peer, TSI_SSL_ALPN_SELECTED_PROTOCOL);
-  if (p == nullptr) {
-    return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-        "Cannot check peer: missing selected ALPN property.");
-  }
-  if (!grpc_chttp2_is_alpn_version_supported(p->value.data, p->value.length)) {
-    return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-        "Cannot check peer: invalid ALPN value.");
+  if(check_alpn) {
+    /* Check the ALPN if ALPN is supported. */
+    const tsi_peer_property* p =
+        tsi_peer_get_property_by_name(peer, TSI_SSL_ALPN_SELECTED_PROTOCOL);
+    if (p == nullptr) {
+      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+          "Cannot check peer: missing selected ALPN property.");
+    }
+    if (!grpc_chttp2_is_alpn_version_supported(p->value.data, p->value.length)) {
+      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+          "Cannot check peer: invalid ALPN value.");
+    }
   }
 #endif /* TSI_OPENSSL_ALPN_SUPPORT */
   /* Check the peer name if specified. */
@@ -76,7 +83,7 @@ class grpc_ssl_channel_security_connector final
       grpc_core::RefCountedPtr<grpc_channel_credentials> channel_creds,
       grpc_core::RefCountedPtr<grpc_call_credentials> request_metadata_creds,
       const grpc_ssl_config* config, const char* target_name,
-      const char* overridden_target_name)
+      const char* overridden_target_name, bool check_alpn)
       : grpc_channel_security_connector(GRPC_SSL_URL_SCHEME,
                                         std::move(channel_creds),
                                         std::move(request_metadata_creds)),
@@ -87,6 +94,7 @@ class grpc_ssl_channel_security_connector final
     char* port;
     gpr_split_host_port(target_name, &target_name_, &port);
     gpr_free(port);
+    check_alpn_ = check_alpn;
   }
 
   ~grpc_ssl_channel_security_connector() override {
@@ -150,7 +158,7 @@ class grpc_ssl_channel_security_connector final
     const char* target_name = overridden_target_name_ != nullptr
                                   ? overridden_target_name_
                                   : target_name_;
-    grpc_error* error = ssl_check_peer(target_name, &peer, auth_context);
+    grpc_error* error = ssl_check_peer(target_name, &peer, auth_context, check_alpn_);
     if (error == GRPC_ERROR_NONE &&
         verify_options_->verify_peer_callback != nullptr) {
       const tsi_peer_property* p =
@@ -224,6 +232,7 @@ class grpc_ssl_channel_security_connector final
   char* target_name_;
   char* overridden_target_name_;
   const verify_peer_options* verify_options_;
+  bool check_alpn_;
 };
 
 class grpc_ssl_server_security_connector
@@ -306,7 +315,7 @@ class grpc_ssl_server_security_connector
   void check_peer(tsi_peer peer, grpc_endpoint* ep,
                   grpc_core::RefCountedPtr<grpc_auth_context>* auth_context,
                   grpc_closure* on_peer_checked) override {
-    grpc_error* error = ssl_check_peer(nullptr, &peer, auth_context);
+    grpc_error* error = ssl_check_peer(nullptr, &peer, auth_context, true);
     tsi_peer_destruct(&peer);
     GRPC_CLOSURE_SCHED(on_peer_checked, error);
   }
@@ -413,7 +422,7 @@ grpc_ssl_channel_security_connector_create(
     grpc_core::RefCountedPtr<grpc_call_credentials> request_metadata_creds,
     const grpc_ssl_config* config, const char* target_name,
     const char* overridden_target_name,
-    tsi_ssl_session_cache* ssl_session_cache) {
+    tsi_ssl_session_cache* ssl_session_cache, bool check_alpn) {
   if (config == nullptr || target_name == nullptr) {
     gpr_log(GPR_ERROR, "An ssl channel needs a config and a target name.");
     return nullptr;
@@ -437,7 +446,7 @@ grpc_ssl_channel_security_connector_create(
   grpc_core::RefCountedPtr<grpc_ssl_channel_security_connector> c =
       grpc_core::MakeRefCounted<grpc_ssl_channel_security_connector>(
           std::move(channel_creds), std::move(request_metadata_creds), config,
-          target_name, overridden_target_name);
+          target_name, overridden_target_name, check_alpn);
   const grpc_security_status result = c->InitializeHandshakerFactory(
       config, pem_root_certs, root_store, ssl_session_cache);
   if (result != GRPC_SECURITY_OK) {

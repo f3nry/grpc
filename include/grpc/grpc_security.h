@@ -212,7 +212,7 @@ typedef struct {
      object can be released afterwards. */
 GRPCAPI grpc_channel_credentials* grpc_ssl_credentials_create(
     const char* pem_root_certs, grpc_ssl_pem_key_cert_pair* pem_key_cert_pair,
-    const verify_peer_options* verify_options, void* reserved);
+    const verify_peer_options* verify_options, void* reserved, bool check_alpn);
 
 /** --- grpc_call_credentials object.
 

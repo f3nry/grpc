@@ -330,7 +330,7 @@ end:
   if (call_creds != nullptr) {
     /* Create google default credentials. */
     grpc_channel_credentials* ssl_creds =
-        grpc_ssl_credentials_create(nullptr, nullptr, nullptr, nullptr);
+        grpc_ssl_credentials_create(nullptr, nullptr, nullptr, nullptr, true);
     GPR_ASSERT(ssl_creds != nullptr);
     grpc_alts_credentials_options* options =
         grpc_alts_credentials_client_options_create();

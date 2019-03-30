@@ -28,7 +28,7 @@ class grpc_ssl_credentials : public grpc_channel_credentials {
  public:
   grpc_ssl_credentials(const char* pem_root_certs,
                        grpc_ssl_pem_key_cert_pair* pem_key_cert_pair,
-                       const verify_peer_options* verify_options);
+                       const verify_peer_options* verify_options, bool check_alpn);
 
   ~grpc_ssl_credentials() override;
 
@@ -38,6 +38,7 @@ class grpc_ssl_credentials : public grpc_channel_credentials {
       const char* target, const grpc_channel_args* args,
       grpc_channel_args** new_args) override;
 
+  bool check_alpn_;
  private:
   void build_config(const char* pem_root_certs,
                     grpc_ssl_pem_key_cert_pair* pem_key_cert_pair,

@@ -46,8 +46,9 @@ void grpc_tsi_ssl_pem_key_cert_pairs_destroy(tsi_ssl_pem_key_cert_pair* kp,
 
 grpc_ssl_credentials::grpc_ssl_credentials(
     const char* pem_root_certs, grpc_ssl_pem_key_cert_pair* pem_key_cert_pair,
-    const verify_peer_options* verify_options)
+    const verify_peer_options* verify_options, bool check_alpn)
     : grpc_channel_credentials(GRPC_CHANNEL_CREDENTIALS_TYPE_SSL) {
+  check_alpn_ = check_alpn;
   build_config(pem_root_certs, pem_key_cert_pair, verify_options);
 }
 
@@ -82,7 +83,7 @@ grpc_ssl_credentials::create_security_connector(
   grpc_core::RefCountedPtr<grpc_channel_security_connector> sc =
       grpc_ssl_channel_security_connector_create(
           this->Ref(), std::move(call_creds), &config_, target,
-          overridden_target_name, ssl_session_cache);
+          overridden_target_name, ssl_session_cache, check_alpn_);
   if (sc == nullptr) {
     return sc;
   }
@@ -119,7 +120,7 @@ void grpc_ssl_credentials::build_config(
 
 grpc_channel_credentials* grpc_ssl_credentials_create(
     const char* pem_root_certs, grpc_ssl_pem_key_cert_pair* pem_key_cert_pair,
-    const verify_peer_options* verify_options, void* reserved) {
+    const verify_peer_options* verify_options, void* reserved, bool check_alpn) {
   GRPC_API_TRACE(
       "grpc_ssl_credentials_create(pem_root_certs=%s, "
       "pem_key_cert_pair=%p, "
@@ -129,7 +130,7 @@ grpc_channel_credentials* grpc_ssl_credentials_create(
   GPR_ASSERT(reserved == nullptr);
 
   return grpc_core::New<grpc_ssl_credentials>(pem_root_certs, pem_key_cert_pair,
-                                              verify_options);
+                                              verify_options, check_alpn);
 }
 
 //
